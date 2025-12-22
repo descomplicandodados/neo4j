@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "neo4j-airflow"
+version = "0.1.0"
+description = "Neo4j data pipeline with Airflow"
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+neo4j = "^5.15.0"
+apache-airflow = "2.8.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
