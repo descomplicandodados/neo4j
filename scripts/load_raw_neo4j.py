@@ -5,32 +5,43 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
 # ==========================================================
-# Neo4j
+# Variáveis de ambiente (.env)
 # ==========================================================
-NEO4J_URI = "bolt://neo4j:7687"
-NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "teste123"
+NEO4J_URI = os.getenv("NEO4J_URI")
+NEO4J_USER = os.getenv("NEO4J_USER")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+
+SOURCE_DIR = os.getenv("SOURCE_DIR")
+NEO4J_IMPORT_DIR = os.getenv("NEO4J_IMPORT_DIR")
+
+MAX_LINES_PER_FILE = int(os.getenv("MAX_LINES_PER_FILE", "10000"))
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", "5000"))
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "3"))
 
 # ==========================================================
-# Diretórios
+# Validação obrigatória
 # ==========================================================
-SOURCE_DIR = "/opt/bases_neo4j"
-NEO4J_IMPORT_DIR = "/opt/airflow/import_raw"
+required = {
+    "NEO4J_URI": NEO4J_URI,
+    "NEO4J_USER": NEO4J_USER,
+    "NEO4J_PASSWORD": NEO4J_PASSWORD,
+    "SOURCE_DIR": SOURCE_DIR,
+    "NEO4J_IMPORT_DIR": NEO4J_IMPORT_DIR,
+}
+
+missing = [k for k, v in required.items() if not v]
+if missing:
+    raise RuntimeError(f"❌ Variáveis de ambiente ausentes: {', '.join(missing)}")
 
 # ==========================================================
-# Configurações
+# Lock para logs thread-safe
 # ==========================================================
-BATCH_SIZE = 5000
-MAX_WORKERS = 3  # Número de arquivos processados simultaneamente
-
-# Lock para prints sincronizados (Airflow-safe)
 print_lock = Lock()
 
 
-def safe_print(*args, **kwargs):
-    """Print thread-safe (evita logs embaralhados no Airflow)"""
+def safe_print(*args):
     with print_lock:
-        print(*args, **kwargs)
+        print(*args)
 
 
 # ==========================================================
@@ -48,9 +59,8 @@ def process_file(driver, filename, idx, total_files):
 
     try:
         with driver.session() as session:
-
             # --------------------------------------------------
-            # Copia do arquivo
+            # Copiar arquivo
             # --------------------------------------------------
             safe_print(f"   📋 [{filename}] Copiando arquivo...")
             shutil.copy(source_path, target_path)
@@ -63,7 +73,7 @@ def process_file(driver, filename, idx, total_files):
             is_large_file = line_count > 100_000
 
             # --------------------------------------------------
-            # Cypher
+            # Cypher CORRETO (ORDER BY + LIMIT)
             # --------------------------------------------------
             cypher = f"""
             CALL apoc.periodic.iterate(
@@ -73,6 +83,9 @@ def process_file(driver, filename, idx, total_files):
               FIELDTERMINATOR '|'
               WITH row
               WHERE row.id IS NOT NULL
+              WITH row
+              ORDER BY row.id ASC
+              LIMIT {MAX_LINES_PER_FILE}
               RETURN row
               ",
               "
@@ -93,61 +106,46 @@ def process_file(driver, filename, idx, total_files):
                 parallel: {'true' if is_large_file else 'false'}
               }}
             )
-            YIELD batches, total, timeTaken, committedOperations,
-                  failedOperations, failedBatches, retries, errorMessages, operations
+            YIELD total, committedOperations, failedOperations, timeTaken, operations
             RETURN *
             """
 
             safe_print(
                 f"   ⚙️  [{filename}] "
-                f"Processando no Neo4j (batch={BATCH_SIZE}, parallel={is_large_file})..."
+                f"Neo4j (batch={BATCH_SIZE}, limit={MAX_LINES_PER_FILE}, parallel={is_large_file})"
             )
 
-            result = session.run(cypher)
-            record = result.single()
+            record = session.run(cypher).single()
 
             if not record:
                 safe_print(f"   ⚠️  [{filename}] Nenhum resultado retornado")
                 return None
 
-            # --------------------------------------------------
-            # Métricas seguras
-            # --------------------------------------------------
-            total = record["total"] or 0
-            committed = record["committedOperations"] or 0
-            failed = record["failedOperations"] or 0
-            time_ms = record["timeTaken"] or 0
+            total = record.get("total", 0) or 0
+            committed = record.get("committedOperations", 0) or 0
+            failed = record.get("failedOperations", 0) or 0
+            time_ms = record.get("timeTaken", 0) or 0
 
-            safe_print(f"   ✅ [{filename}] Dados processados")
-            safe_print(f"   📊 [{filename}] Total: {total:,}")
-            safe_print(f"   📊 [{filename}] Commitados: {committed:,}")
-            safe_print(f"   📊 [{filename}] Falhas: {failed:,}")
+            safe_print(f"   ✅ [{filename}] Processado")
+            safe_print(f"   📊 Total: {total:,}")
+            safe_print(f"   📊 Commitados: {committed:,}")
+            safe_print(f"   📊 Falhas: {failed:,}")
 
             if time_ms > 0:
-                time_seconds = time_ms / 1000
-                rate = total / time_seconds if total else 0
-                safe_print(
-                    f"   ⏱️  [{filename}] Tempo: {time_seconds:.2f}s "
-                    f"({rate:,.0f} registros/s)"
-                )
+                time_s = time_ms / 1000
+                rate = total / time_s if total else 0
+                safe_print(f"   ⏱️  {time_s:.2f}s ({rate:,.0f} reg/s)")
             else:
-                safe_print(
-                    f"   ⏱️  [{filename}] Tempo: < 1ms "
-                    f"({total:,} registros)"
-                )
+                safe_print(f"   ⏱️  <1ms")
 
             ops = record.get("operations") or {}
             created = ops.get("created", 0)
             updated = total - created
 
-            safe_print(f"   🆕 [{filename}] Novos: {created:,}")
-            safe_print(f"   🔄 [{filename}] Atualizados: {updated:,}")
-
-            if failed > 0:
-                safe_print(f"   ⚠️  [{filename}] Erros: {record['errorMessages']}")
+            safe_print(f"   🆕 Criados: {created:,}")
+            safe_print(f"   🔄 Atualizados: {updated:,}")
 
             return {
-                "filename": filename,
                 "success": True,
                 "created": created,
                 "updated": updated,
@@ -158,82 +156,43 @@ def process_file(driver, filename, idx, total_files):
         safe_print(f"   ❌ [{filename}] Erro: {e}")
         import traceback
         safe_print(traceback.format_exc())
-        return {
-            "filename": filename,
-            "success": False,
-            "error": str(e),
-        }
+        return {"success": False}
 
 
 # ==========================================================
-# Função principal (chamada pelo Airflow)
+# Função principal (Airflow)
 # ==========================================================
 def load_raw_files():
     safe_print("=" * 60)
-    safe_print("🚀 Iniciando carregamento COMPLETO de dados RAW para Neo4j")
-    safe_print(f"⚡ Processamento paralelo com {MAX_WORKERS} workers")
+    safe_print("🚀 Iniciando carga RAW no Neo4j")
     safe_print("=" * 60)
 
     driver = GraphDatabase.driver(
         NEO4J_URI,
         auth=(NEO4J_USER, NEO4J_PASSWORD),
-        max_connection_lifetime=3600,
         max_connection_pool_size=50,
+        max_connection_lifetime=3600,
         connection_acquisition_timeout=120,
     )
 
-    try:
-        driver.verify_connectivity()
-        safe_print("✅ Conectado ao Neo4j com sucesso!")
-    except Exception as e:
-        safe_print(f"❌ Erro ao conectar no Neo4j: {e}")
-        driver.close()
-        raise
+    driver.verify_connectivity()
 
-    # ------------------------------------------------------
-    # Pré-validações
-    # ------------------------------------------------------
+    # Constraint única
     with driver.session() as session:
-        try:
-            version = session.run("RETURN apoc.version() AS v").single()
-            safe_print(f"✅ APOC instalado: {version['v']}")
-        except Exception as e:
-            safe_print(f"⚠️  APOC pode não estar disponível: {e}")
-
-        safe_print("\n🧹 Limpando duplicatas...")
-        session.run("""
-            MATCH (n:Raw)
-            WITH n.id AS id, collect(n) AS nodes
-            WHERE size(nodes) > 1
-            FOREACH (node IN tail(nodes) | DELETE node)
-        """)
-
-        safe_print("🔧 Criando constraint única...")
         session.run("""
             CREATE CONSTRAINT raw_unique_id IF NOT EXISTS
             FOR (n:Raw)
             REQUIRE n.id IS UNIQUE
         """)
 
-    # ------------------------------------------------------
-    # Lista de arquivos
-    # ------------------------------------------------------
     files = sorted(f for f in os.listdir(SOURCE_DIR) if f.endswith(".txt"))
-
-    safe_print(f"\n📁 Arquivos encontrados: {len(files)}")
+    safe_print(f"📁 Arquivos encontrados: {len(files)}")
 
     if not files:
-        safe_print("⚠️  Nenhum arquivo .txt encontrado!")
         driver.close()
         return
 
-    # ------------------------------------------------------
-    # Execução paralela
-    # ------------------------------------------------------
-    total_created = 0
-    total_updated = 0
-    success = 0
-    failed = 0
+    total_created = total_updated = success = failed = 0
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {
@@ -242,24 +201,20 @@ def load_raw_files():
         }
 
         for future in as_completed(futures):
-            result = future.result()
-            if not result:
-                failed += 1
-                continue
-
-            if result.get("success"):
+            r = future.result()
+            if r and r.get("success"):
                 success += 1
-                total_created += result.get("created", 0)
-                total_updated += result.get("updated", 0)
+                total_created += r.get("created", 0)
+                total_updated += r.get("updated", 0)
             else:
                 failed += 1
 
     driver.close()
 
-    safe_print("\n" + "=" * 60)
-    safe_print("✅ Processo finalizado!")
-    safe_print(f"📁 Arquivos processados com sucesso: {success}/{len(files)}")
-    safe_print(f"❌ Arquivos com falha: {failed}")
-    safe_print(f"🆕 Total de novos registros: {total_created:,}")
-    safe_print(f"🔄 Total de registros atualizados: {total_updated:,}")
+    safe_print("=" * 60)
+    safe_print("✅ Carga finalizada")
+    safe_print(f"✔️ Sucesso: {success}")
+    safe_print(f"❌ Falhas: {failed}")
+    safe_print(f"🆕 Criados: {total_created:,}")
+    safe_print(f"🔄 Atualizados: {total_updated:,}")
     safe_print("=" * 60)
