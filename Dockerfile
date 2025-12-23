@@ -22,6 +22,9 @@ USER airflow
 COPY --chown=airflow:root requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
+# Instalar pytest e dependências de teste DEPOIS dos requirements
+RUN pip install --no-cache-dir --upgrade pytest pytest-cov neo4j
+
 # Volta para root para o entrypoint executar
 USER root
 

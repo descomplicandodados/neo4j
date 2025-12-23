@@ -1,0 +1,20 @@
+# Dependências para testes
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.1
+pytest-asyncio>=0.21.1
+
+# Driver Neo4j
+neo4j>=5.14.0
+
+# Utilitários
+python-dotenv>=1.0.0
+
+# Para relatórios HTML
+pytest-html>=4.0.0
+
+# Para testes paralelos (opcional)
+pytest-xdist>=3.3.1
+
+# Para análise de cobertura
+coverage>=7.3.0

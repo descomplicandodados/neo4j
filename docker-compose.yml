@@ -73,9 +73,15 @@ services:
       NEO4J_IMPORT_DIR: ${NEO4J_IMPORT_DIR}
       MAX_LINES_PER_FILE: ${MAX_LINES_PER_FILE}
 
+      # 🔹 Variáveis para testes
+      TEST_NEO4J_URI: bolt://neo4j:7687
+      TEST_NEO4J_USER: ${NEO4J_USER}
+      TEST_NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+
     volumes:
       - ./dags:/opt/airflow/dags
       - ./scripts:/opt/airflow/scripts
+      - ./tests:/opt/airflow/tests          # ⭐ ADICIONADO - Pasta de testes
       - ./import_raw:/opt/airflow/import_raw
       - ./bases_neo4j:/opt/bases_neo4j
       - airflow_logs:/opt/airflow/logs

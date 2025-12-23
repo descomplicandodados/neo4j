@@ -14,8 +14,8 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 SOURCE_DIR = os.getenv("SOURCE_DIR")
 NEO4J_IMPORT_DIR = os.getenv("NEO4J_IMPORT_DIR")
 
-MAX_LINES_PER_FILE = int(os.getenv("MAX_LINES_PER_FILE", "10000"))
-BATCH_SIZE = int(os.getenv("BATCH_SIZE", "5000"))
+MAX_LINES_PER_FILE = int(os.getenv("MAX_LINES_PER_FILE", "3000"))
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", "1000"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "3"))
 
 # ==========================================================
@@ -84,7 +84,7 @@ def process_file(driver, filename, idx, total_files):
               WITH row
               WHERE row.id IS NOT NULL
               WITH row
-              ORDER BY row.id ASC
+              ORDER BY row.id DESC
               LIMIT {MAX_LINES_PER_FILE}
               RETURN row
               ",
