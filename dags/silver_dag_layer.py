@@ -6,7 +6,7 @@ from datetime import datetime
 
 sys.path.insert(0, '/opt/airflow/scripts')
 
-from load_raw_neo4j import load_raw_files
+from load_silver_neo4j import load_silver
 
 default_args = {
     'owner': 'airflow',
@@ -15,23 +15,23 @@ default_args = {
 }
 
 with DAG(
-    dag_id='bronze_layer_dag',
+    dag_id='silver_layer_dag',
     default_args=default_args,
-    schedule_interval='@daily',
+    schedule_interval=None,
     catchup=False,
-    tags=['neo4j', 'bronze']
+    tags=['neo4j', 'silver']
 ) as dag:
 
-    bronze_task = PythonOperator(
-        task_id='load_bronze_neo4j',
-        python_callable=load_raw_files
+    silver_task = PythonOperator(
+        task_id='load_silver_neo4j',
+        python_callable=load_silver
     )
 
-    trigger_silver = TriggerDagRunOperator(
-        task_id='trigger_silver_dag',
-        trigger_dag_id='silver_layer_dag',
+    trigger_gold = TriggerDagRunOperator(
+        task_id='trigger_gold_dag',
+        trigger_dag_id='gold_layer_dag',
         wait_for_completion=False,
         reset_dag_run=True
     )
 
-    bronze_task >> trigger_silver
+    silver_task >> trigger_gold
