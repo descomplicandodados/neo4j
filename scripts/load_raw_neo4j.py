@@ -94,6 +94,8 @@ def process_file(driver, filename, idx, total_files):
               WITH row
               WHERE row.{id_field} IS NOT NULL
               WITH row
+              ORDER BY row.nct_id DESC
+              WITH row
               LIMIT 1000
               RETURN row
               ",
