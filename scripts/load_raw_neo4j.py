@@ -46,9 +46,11 @@ def safe_print(*args):
 # Processamento de um único arquivo
 # ==========================================================
 def process_file(driver, filename, idx, total_files):
+
     source_path = os.path.join(SOURCE_DIR, filename)
     target_path = os.path.join(NEO4J_IMPORT_DIR, filename)
 
+    # studies.txt NÃO tem id, apenas nct_id
     id_field = "nct_id" if filename == "studies.txt" else "id"
     label = f"Bronze_{filename.replace('.txt', '')}"
 
@@ -56,14 +58,18 @@ def process_file(driver, filename, idx, total_files):
         safe_print(f"⚠️ Arquivo não encontrado: {source_path}")
         return None
 
-    safe_print(f"\n🔄 [{idx}/{total_files}] Processando: {filename}")
+    safe_print(f"\n🔄 [{idx}/{total_files}] Processando arquivo: {filename}")
+    safe_print(f"   🔑 Campo de chave: {id_field}")
+    safe_print(f"   🏷️ Label Neo4j: {label}")
 
     try:
         with driver.session() as session:
 
             # --------------------------------------------------
-            # Constraint única por label
+            # Constraint única
             # --------------------------------------------------
+            safe_print(f"   🔐 Criando constraint UNIQUE ({label}.{id_field})")
+
             session.run(f"""
                 CREATE CONSTRAINT IF NOT EXISTS
                 FOR (n:{label})
@@ -78,13 +84,16 @@ def process_file(driver, filename, idx, total_files):
             with open(source_path, "r", encoding="utf-8") as f:
                 total_lines = max(sum(1 for _ in f) - 1, 0)
 
-            safe_print(f"   📋 [{filename}] Copiado ({total_lines:,} linhas)")
+            safe_print(f"   📄 Linhas detectadas: {total_lines:,}")
+            safe_print(f"   📥 Copiado para Neo4j import dir")
 
             is_large_file = total_lines > 100_000
 
             # --------------------------------------------------
-            # Cypher BRONZE (RAW, sem regra de negócio)
+            # Cypher BRONZE (RAW)
             # --------------------------------------------------
+            safe_print(f"   ▶️ Iniciando carga APOC ({filename})")
+
             cypher = f"""
             CALL apoc.periodic.iterate(
               "
@@ -93,10 +102,6 @@ def process_file(driver, filename, idx, total_files):
               FIELDTERMINATOR '|'
               WITH row
               WHERE row.{id_field} IS NOT NULL
-              WITH row
-              ORDER BY row.nct_id DESC
-              WITH row
-              LIMIT 1000
               RETURN row
               ",
               "
@@ -106,12 +111,11 @@ def process_file(driver, filename, idx, total_files):
                 n.nct_id = row.nct_id,
                 n.__file = '{filename}',
                 n.__label = '{label}',
-                n.__loaded_at = datetime(),
                 n.__created_at = datetime()
               ON MATCH SET
-                n += row,
-                n.__loaded_at = datetime(),
-                n.__updated_at = datetime()
+                n += row
+              SET
+                n.__loaded_at = datetime()
               ",
               {{
                 batchSize: {BATCH_SIZE},
@@ -125,7 +129,7 @@ def process_file(driver, filename, idx, total_files):
             record = session.run(cypher).single()
 
             if not record:
-                safe_print(f"   ⚠️ [{filename}] Nenhum resultado retornado")
+                safe_print(f"   ⚠️ [{filename}] Nenhum retorno do APOC")
                 return None
 
             total = record.get("total", 0) or 0
@@ -133,17 +137,17 @@ def process_file(driver, filename, idx, total_files):
             failed = record.get("failedOperations", 0) or 0
             time_ms = record.get("timeTaken", 0) or 0
 
-            safe_print(f"   ✅ [{filename}] Processado")
-            safe_print(f"   📊 Total: {total:,}")
+            safe_print(f"   ✅ [{filename}] Carga concluída")
+            safe_print(f"   📊 Total processado: {total:,}")
             safe_print(f"   📊 Commitados: {committed:,}")
             safe_print(f"   ❌ Falhas: {failed:,}")
 
             if time_ms > 0:
                 seconds = time_ms / 1000
                 rate = total / seconds if total else 0
-                safe_print(f"   ⏱️ {seconds:.2f}s ({rate:,.0f} reg/s)")
+                safe_print(f"   ⏱️ Tempo: {seconds:.2f}s ({rate:,.0f} reg/s)")
             else:
-                safe_print(f"   ⏱️ <1ms")
+                safe_print(f"   ⏱️ Tempo: <1ms")
 
             ops = record.get("operations") or {}
             created = ops.get("created", 0)
@@ -160,7 +164,7 @@ def process_file(driver, filename, idx, total_files):
             }
 
     except Exception as e:
-        safe_print(f"   ❌ [{filename}] Erro: {e}")
+        safe_print(f"   ❌ [{filename}] Erro durante carga")
         import traceback
         safe_print(traceback.format_exc())
         return {"success": False}
@@ -169,9 +173,10 @@ def process_file(driver, filename, idx, total_files):
 # Função principal (Airflow)
 # ==========================================================
 def load_raw_files():
-    safe_print("=" * 60)
-    safe_print("🚀 Iniciando carga BRONZE (RAW) no Neo4j")
-    safe_print("=" * 60)
+
+    safe_print("=" * 70)
+    safe_print("🚀 INICIANDO CARGA BRONZE (RAW) NO NEO4J")
+    safe_print("=" * 70)
 
     driver = GraphDatabase.driver(
         NEO4J_URI,
@@ -209,10 +214,10 @@ def load_raw_files():
 
     driver.close()
 
-    safe_print("=" * 60)
-    safe_print("✅ Carga BRONZE finalizada")
-    safe_print(f"✔️ Sucesso: {success}")
-    safe_print(f"❌ Falhas: {failed}")
-    safe_print(f"🆕 Criados: {total_created:,}")
-    safe_print(f"🔄 Atualizados: {total_updated:,}")
-    safe_print("=" * 60)
+    safe_print("=" * 70)
+    safe_print("✅ CARGA BRONZE FINALIZADA")
+    safe_print(f"✔️ Arquivos com sucesso: {success}")
+    safe_print(f"❌ Arquivos com falha: {failed}")
+    safe_print(f"🆕 Nós criados: {total_created:,}")
+    safe_print(f"🔄 Nós atualizados: {total_updated:,}")
+    safe_print("=" * 70)

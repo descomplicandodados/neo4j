@@ -2,13 +2,10 @@ import os
 from neo4j import GraphDatabase
 
 # ==========================================================
-# Função chamada pelo Airflow
+# Função chamada pelo Airflow / pipeline
 # ==========================================================
 def load_gold():
 
-    # ------------------------------------------------------
-    # Variáveis de ambiente
-    # ------------------------------------------------------
     NEO4J_URI = os.getenv("NEO4J_URI")
     NEO4J_USER = os.getenv("NEO4J_USER")
     NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
@@ -16,9 +13,6 @@ def load_gold():
     if not all([NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD]):
         raise RuntimeError("❌ Variáveis de ambiente do Neo4j não configuradas")
 
-    # ------------------------------------------------------
-    # Conexão Neo4j
-    # ------------------------------------------------------
     driver = GraphDatabase.driver(
         NEO4J_URI,
         auth=(NEO4J_USER, NEO4J_PASSWORD)
@@ -27,63 +21,63 @@ def load_gold():
     try:
         with driver.session() as session:
 
-            print("🚀 Iniciando transformação SILVER → GOLD")
+            print("🚀 INICIANDO TRANSFORMAÇÃO SILVER → GOLD")
 
-            # --------------------------------------------------
-            # Study metrics
-            # --------------------------------------------------
-            print("📊 Calculando métricas por Study")
+            # ==================================================
+            # Trial metrics
+            # ==================================================
+            print("📊 Calculando métricas por Trial")
 
             session.run("""
-                MATCH (s:Study)
-                OPTIONAL MATCH (s)-[:HAS_CONDITION]->(c)
-                OPTIONAL MATCH (s)-[:STUDIED_IN]->(d)
-                WITH s,
-                     count(DISTINCT c) AS conditions,
-                     count(DISTINCT d) AS drugs
+                MATCH (t:Silver_trials)
+                OPTIONAL MATCH (t)-[:HAS_CONDITION]->(c:Silver_conditions)
+                OPTIONAL MATCH (t)<-[:TESTED_IN]-(i:Silver_interventions)
+                WITH t,
+                     count(DISTINCT c) AS num_conditions,
+                     count(DISTINCT i) AS num_interventions
                 SET
-                    s.num_conditions = conditions,
-                    s.num_drugs = drugs
+                    t.num_conditions = num_conditions,
+                    t.num_interventions = num_interventions
             """)
 
-            # --------------------------------------------------
+            # ==================================================
             # Drug popularity
-            # --------------------------------------------------
-            print("💊 Calculando popularidade de Drug")
+            # ==================================================
+            print("💊 Calculando popularidade de Interventions")
 
             session.run("""
-                MATCH (d:Drug)<-[:STUDIED_IN]-(s:Study)
-                WITH d, count(DISTINCT s) AS trials
-                SET d.trial_count = trials
+                MATCH (i:Silver_interventions)-[:TESTED_IN]->(t:Silver_trials)
+                WITH i, count(DISTINCT t) AS trial_count
+                SET i.trial_count = trial_count
             """)
 
-            # --------------------------------------------------
+            # ==================================================
             # Condition coverage
-            # --------------------------------------------------
-            print("🧬 Calculando cobertura de Condition")
+            # ==================================================
+            print("🧬 Calculando cobertura de Conditions")
 
             session.run("""
-                MATCH (c:Condition)<-[:HAS_CONDITION]-(s:Study)
+                MATCH (c:Silver_conditions)<-[:HAS_CONDITION]-(t:Silver_trials)
                 WITH c,
-                     count(DISTINCT s) AS trials,
-                     collect(DISTINCT s.phase) AS phases
+                     count(DISTINCT t) AS trial_count,
+                     collect(DISTINCT t.phase) AS phases
                 SET
-                    c.trial_count = trials,
+                    c.trial_count = trial_count,
                     c.phases = phases
             """)
 
-            # --------------------------------------------------
+            # ==================================================
             # Organization involvement
-            # --------------------------------------------------
-            print("🏢 Calculando envolvimento de Organization")
+            # ==================================================
+            print("🏢 Calculando envolvimento de Organizations")
 
             session.run("""
-                MATCH (o:Organization)<-[:SPONSORED_BY]-(s:Study)
-                WITH o, count(DISTINCT s) AS studies
-                SET o.study_count = studies
+                MATCH (o:Silver_sponsors)<-[:SPONSORED_BY]-(t:Silver_trials)
+                WITH o, count(DISTINCT t) AS trial_count
+                SET o.trial_count = trial_count
             """)
 
-            print("✅ Transformação GOLD concluída com sucesso")
+            print("✅ TRANSFORMAÇÃO GOLD FINALIZADA COM SUCESSO")
 
     finally:
         driver.close()
