@@ -46,7 +46,7 @@ Before start, you will need docker installed on your computer:
 - Clone the repository to your local machine.
 
 ```
-git clone git@github.com:descomplicandodados/neo4j.git
+git clone https://github.com/descomplicandodados/neo4j.git
 ```
 
 - Open de project folder
