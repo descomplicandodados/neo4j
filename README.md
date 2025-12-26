@@ -41,3 +41,31 @@ Before start, you will need docker installed on your computer:
 - psycopg2-binary
 - pandas
 
+## Steps
+
+- Clone the repository to your local machine.
+
+```
+git clone git@github.com:descomplicandodados/neo4j.git
+```
+
+- Open de project folder
+
+```
+cd neo4j
+```
+
+- Download data from [Clinical-Trials](https://ctti-aact.nyc3.digitaloceanspaces.com/6scsc1rzihfyr5gdh3fxglrs8sro)
+- Extract data from zip/rar, copy all txt files and past on neo4j/bases_neo4j folder
+
+- Execute the commands:
+```
+docker build -t neo4j .
+```
+
+```
+docker run --rm neo4j
+```
+
+- Wait 1 minute or a little bit more to neo4j and airflow starts to working
+
