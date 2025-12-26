@@ -81,4 +81,19 @@ docker run --rm neo4j
 - Use this address [Airflow](http://localhost:8080/) to access airflow, use de user:admin and password:admin, both can be changed on .env file. On Airflow you will active this 3 dags.
 ![alt text](image.png)
 
-You will wait until de Runs column status be "sucess"
+You will wait until de Runs column status be "sucess". This process will have between 40 and 50 minutes.
+
+## Neo4j
+Use this address[Neo4j](http://localhost:7474/) to access neo4j, use user:neo4j and password:teste123, both can be changed on .env file.
+One on neo4j, you can run queries like this
+![alt text](image-1.png)
+
+like this
+
+![alt text](image-2.png)
+
+like this
+![alt text](image-3.png)
+
+or like this
+![alt text](image-4.png)
