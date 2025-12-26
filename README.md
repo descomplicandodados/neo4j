@@ -69,3 +69,16 @@ docker run --rm neo4j
 
 - Wait 1 minute or a little bit more to neo4j and airflow starts to working
 
+## Run this commands to execute the tests
+```
+ tests/run_tests.sh all
+ ```
+ ```
+ tests/run_tests.sh integration
+ ```
+
+## Airflow
+- Use this address [Airflow](http://localhost:8080/) to access airflow, use de user:admin and password:admin, both can be changed on .env file. On Airflow you will active this 3 dags.
+![alt text](image.png)
+
+You will wait until de Runs column status be "sucess"
