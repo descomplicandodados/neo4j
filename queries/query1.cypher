@@ -1,7 +1,7 @@
 MATCH (p:Phase)
 CALL {
   WITH p
-  MATCH (d:Silver_interventions)-[:TESTED_IN_PHASE]->(p)
+  MATCH (d:staged_interventions)-[:STUDIED_IN_PHASE]->(p)
   RETURN d
   LIMIT 6
 }

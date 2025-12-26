@@ -1,9 +1,9 @@
 import os
 from neo4j import GraphDatabase
-import pandas as pd  # para exportação CSV/Parquet
+import pandas as pd  # CSV / Parquet export
 
 # ==========================================================
-# Função Airflow
+# Airflow callable
 # ==========================================================
 def load_silver():
 
@@ -13,7 +13,7 @@ def load_silver():
     REPROCESS_EXISTING = os.getenv("REPROCESS_EXISTING", "false").lower() == "true"
 
     if not all([NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD]):
-        raise RuntimeError("❌ Neo4j env vars ausentes")
+        raise RuntimeError("❌ Missing Neo4j environment variables")
 
     driver = GraphDatabase.driver(
         NEO4J_URI,
@@ -23,13 +23,13 @@ def load_silver():
     with driver.session() as session:
 
         print("=" * 80)
-        print("🚀 INICIANDO TRANSFORMAÇÃO staged (GRAPH MODEL CANÔNICO)")
+        print("🚀 STARTING SILVER TRANSFORMATION (CANONICAL GRAPH MODEL)")
         print("=" * 80)
 
         # ==================================================
         # CONSTRAINTS
         # ==================================================
-        print("🔐 Criando constraints")
+        print("🔐 Creating constraints")
 
         session.run("""
         CREATE CONSTRAINT IF NOT EXISTS
@@ -61,34 +61,41 @@ def load_silver():
         REQUIRE p.name IS UNIQUE
         """)
 
-        # NOVOS NÓS: Route e DosageForm
         session.run("""
         CREATE CONSTRAINT IF NOT EXISTS
         FOR (r:Route)
         REQUIRE r.name IS UNIQUE
         """)
+
         session.run("""
         CREATE CONSTRAINT IF NOT EXISTS
         FOR (df:DosageForm)
         REQUIRE df.name IS UNIQUE
         """)
 
-        print("✅ Constraints criadas")
+        print("✅ Constraints ready")
 
         # ==================================================
-        # PHASE NODES (CANÔNICOS)
+        # PHASE NODES
         # ==================================================
-        print("\n🧩 Criando nós Phase canônicos")
+        print("\n🧩 Creating canonical Phase nodes")
+
         session.run("""
         UNWIND ['PHASE 1','PHASE 2','PHASE 3','PHASE 4'] AS phase
         MERGE (:Phase {name: phase});
         """)
 
         # ==================================================
-        # TRIALS (clinical-stage only)
+        # TRIALS
         # ==================================================
-        print("\n🧪 Criando nós staged_trials")
-        merge_clause = "MERGE (t:staged_trials {nct_id: b.nct_id})" if not REPROCESS_EXISTING else "MERGE (t:staged_trials {nct_id: b.nct_id}) SET t = {}"
+        print("\n🧪 Creating staged_trials")
+
+        merge_clause = (
+            "MERGE (t:staged_trials {nct_id: b.nct_id})"
+            if not REPROCESS_EXISTING
+            else "MERGE (t:staged_trials {nct_id: b.nct_id}) SET t = {}"
+        )
+
         result = session.run(f"""
         MATCH (b:Bronze_studies)
         WHERE b.nct_id IS NOT NULL
@@ -110,12 +117,14 @@ def load_silver():
 
         RETURN count(t) AS total
         """).single()
-        print(f"   🧪 Trials criados/atualizados: {result['total']}")
+
+        print(f"   🧪 Trials created/updated: {result['total']}")
 
         # ==================================================
-        # TRIAL → PHASE (CORREÇÃO DEFINITIVA)
+        # TRIAL → PHASE
         # ==================================================
-        print("\n🧩 Criando relação staged_trials → Phase")
+        print("\n🧩 Linking Trials → Phase")
+
         session.run("""
         MATCH (t:staged_trials)
         WHERE t.raw_phase IS NOT NULL
@@ -126,7 +135,7 @@ def load_silver():
 
         WITH t,
              CASE
-               WHEN phase_clean = 'EARLY_PHASE1' THEN 'PHASE 1'     
+               WHEN phase_clean = 'EARLY_PHASE1' THEN 'PHASE 1'
                WHEN phase_clean = 'PHASE1' THEN 'PHASE 1'
                WHEN phase_clean = 'PHASE2' THEN 'PHASE 2'
                WHEN phase_clean = 'PHASE3' THEN 'PHASE 3'
@@ -142,7 +151,8 @@ def load_silver():
         # ==================================================
         # CONDITIONS
         # ==================================================
-        print("\n🧬 Criando Conditions e relacionamentos")
+        print("\n🧬 Creating Conditions")
+
         result = session.run("""
         MATCH (b:Bronze_conditions)
         MATCH (t:staged_trials {nct_id: b.nct_id})
@@ -159,52 +169,66 @@ def load_silver():
 
         RETURN count(*) AS total
         """).single()
-        print(f"   🧬 Conditions vinculadas: {result['total']}")
+
+        print(f"   🧬 Conditions linked: {result['total']}")
 
         # ==================================================
-        # INTERVENTIONS → TRIAL + Route/DosageForm
+        # INTERVENTIONS (BATCHED - FIX)
         # ==================================================
-        print("\n💊 Criando Interventions, STUDIED_IN e Route/DosageForm")
-        result = session.run("""
-        MATCH (b:Bronze_interventions)
-        MATCH (t:staged_trials {nct_id: b.nct_id})
-        WHERE b.nct_id IS NOT NULL
-          AND b.name IS NOT NULL
-          AND trim(b.name) <> ''
+        print("\n💊 Creating Interventions, STUDIED_IN, Route & DosageForm (BATCHED)")
 
-        MERGE (d:staged_interventions { name: toLower(trim(b.name)) })
+        session.run("""
+        CALL apoc.periodic.iterate(
+          "
+          MATCH (b:Bronze_interventions)
+          MATCH (t:staged_trials {nct_id: b.nct_id})
+          WHERE b.nct_id IS NOT NULL
+            AND b.name IS NOT NULL
+            AND trim(b.name) <> ''
+          RETURN b, t
+          ",
+          "
+          MERGE (d:staged_interventions { name: toLower(trim(b.name)) })
 
-        MERGE (d)-[r:STUDIED_IN]->(t)
-        SET
-          r.route        = coalesce(toLower(trim(b.route)), 'unknown'),
-          r.dosage_form  = coalesce(toLower(trim(b.dosage_form)), 'unknown'),
-          r.__loaded_at  = datetime()
+          MERGE (d)-[r:STUDIED_IN]->(t)
+          SET
+            r.route        = coalesce(toLower(trim(b.route)), 'unknown'),
+            r.dosage_form  = coalesce(toLower(trim(b.dosage_form)), 'unknown'),
+            r.__loaded_at  = datetime()
 
-        MERGE (route:Route { name: coalesce(toLower(trim(b.route)), 'unknown') })
-        MERGE (df:DosageForm { name: coalesce(toLower(trim(b.dosage_form)), 'unknown') })
+          MERGE (route:Route { name: coalesce(toLower(trim(b.route)), 'unknown') })
+          MERGE (df:DosageForm { name: coalesce(toLower(trim(b.dosage_form)), 'unknown') })
 
-        MERGE (d)-[:USED_ROUTE]->(route)
-        MERGE (d)-[:HAS_DOSAGE_FORM]->(df)
+          MERGE (d)-[:USED_ROUTE]->(route)
+          MERGE (d)-[:HAS_DOSAGE_FORM]->(df)
+          ",
+          {
+            batchSize: 1000,
+            parallel: true
+          }
+        )
+        """)
 
-        RETURN count(r) AS total
-        """).single()
-        print(f"   💊 Interventions vinculadas a Trials e Route/DosageForm: {result['total']}")
+        print("   💊 Interventions processed successfully")
 
         # ==================================================
         # DERIVED: INTERVENTION → PHASE
         # ==================================================
-        print("\n⭐ Criando relação DERIVADA STUDIED_IN_PHASE")
+        print("\n⭐ Creating derived STUDIED_IN_PHASE")
+
         result = session.run("""
         MATCH (d:staged_interventions)-[:STUDIED_IN]->(t:staged_trials)-[:IN_PHASE]->(p:Phase)
         MERGE (d)-[:STUDIED_IN_PHASE]->(p)
         RETURN count(*) AS total
         """).single()
-        print(f"   ⭐ Relações Drug → Phase criadas: {result['total']}")
+
+        print(f"   ⭐ Drug → Phase relations created: {result['total']}")
 
         # ==================================================
         # SPONSORS / COLLABORATORS
         # ==================================================
-        print("\n🏢 Criando Sponsors e relacionamentos")
+        print("\n🏢 Creating Sponsors and Collaborators")
+
         result = session.run("""
         MATCH (b:Bronze_sponsors)
         MATCH (t:staged_trials {nct_id: b.nct_id})
@@ -227,12 +251,14 @@ def load_silver():
 
         RETURN count(o) AS total
         """).single()
-        print(f"   🏢 Organizations processadas: {result['total']}")
+
+        print(f"   🏢 Organizations processed: {result['total']}")
 
         # ==================================================
         # DERIVED: SPONSORS → PHASE
         # ==================================================
-        print("\n🏢 Criando relação derivada SPONSORS_PHASE")
+        print("\n🏢 Creating derived SPONSORS_PHASE")
+
         result = session.run("""
         MATCH (o:staged_sponsors)<-[:SPONSORED_BY]-(t:staged_trials)-[:IN_PHASE]->(p:Phase)
         MERGE (o)-[r:SPONSORS_PHASE]->(p)
@@ -241,12 +267,14 @@ def load_silver():
           r.__created_at  = datetime()
         RETURN count(r) AS total
         """).single()
-        print(f"   🏢 Relações Sponsors → Phase criadas: {result['total']}")
+
+        print(f"   🏢 Sponsors → Phase relations created: {result['total']}")
 
         # ==================================================
-        # EXPORTAÇÃO ANALYSIS VIEW (CSV + Parquet)
+        # EXPORT ANALYSIS VIEW
         # ==================================================
-        print("\n📊 Exportando análise em CSV/Parquet")
+        print("\n📊 Exporting analysis view (CSV / Parquet)")
+
         export_query = """
         MATCH (d:staged_interventions)-[:STUDIED_IN]->(t:staged_trials)-[:STUDIES_CONDITION]->(c:staged_conditions)
         RETURN
@@ -256,6 +284,7 @@ def load_silver():
             collect(DISTINCT t.raw_phase) AS phases
         LIMIT 1000
         """
+
         result = session.run(export_query)
         data = [record.data() for record in result]
 
@@ -263,12 +292,12 @@ def load_silver():
             df = pd.DataFrame(data)
             df.to_csv("analysis_view.csv", index=False)
             df.to_parquet("analysis_view.parquet", index=False)
-            print("✅ CSV e Parquet exportados: analysis_view.csv / analysis_view.parquet")
+            print("✅ Exported analysis_view.csv and analysis_view.parquet")
         else:
-            print("⚠️ Nenhum dado retornado para exportação")
+            print("⚠️ No data returned for export")
 
         print("\n" + "=" * 80)
-        print("✅ TRANSFORMAÇÃO staged FINALIZADA COM SUCESSO")
+        print("✅ SILVER TRANSFORMATION COMPLETED SUCCESSFULLY")
         print("=" * 80)
 
     driver.close()

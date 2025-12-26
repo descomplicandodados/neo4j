@@ -17,7 +17,6 @@ NEO4J_IMPORT_DIR = os.getenv("NEO4J_IMPORT_DIR")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "1000"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "3"))
 
-# ✅ Variável para controlar reprocessamento
 REPROCESS_EXISTING = os.getenv("REPROCESS_EXISTING", "false").lower() == "true"
 
 # ==========================================================
@@ -66,6 +65,9 @@ def process_file(driver, filename, idx, total_files):
     try:
         with driver.session() as session:
 
+            # --------------------------------------------------
+            # Constraint
+            # --------------------------------------------------
             safe_print(f"   🔐 Criando constraint UNIQUE ({label}.{id_field})")
             session.run(f"""
                 CREATE CONSTRAINT IF NOT EXISTS
@@ -73,7 +75,15 @@ def process_file(driver, filename, idx, total_files):
                 REQUIRE n.{id_field} IS UNIQUE
             """)
 
+            # --------------------------------------------------
+            # Contagem ANTES
+            # --------------------------------------------------
+            before = session.run(
+                f"MATCH (n:{label}) RETURN count(n) AS c"
+            ).single()["c"]
+
             shutil.copy(source_path, target_path)
+
             with open(source_path, "r", encoding="utf-8") as f:
                 total_lines = max(sum(1 for _ in f) - 1, 0)
 
@@ -81,11 +91,10 @@ def process_file(driver, filename, idx, total_files):
             safe_print(f"   📥 Copiado para Neo4j import dir")
 
             is_large_file = total_lines > 100_000
-
             safe_print(f"   ▶️ Iniciando carga APOC ({filename})")
 
             # --------------------------------------------------
-            # Monta MERGE de acordo com REPROCESS_EXISTING
+            # MERGE
             # --------------------------------------------------
             if REPROCESS_EXISTING:
                 merge_clause = f"""
@@ -129,22 +138,25 @@ def process_file(driver, filename, idx, total_files):
                 parallel: {'true' if is_large_file else 'false'}
               }}
             )
-            YIELD total, committedOperations, failedOperations, timeTaken, operations
+            YIELD total, committedOperations, failedOperations, timeTaken
             RETURN *
             """
 
             record = session.run(cypher).single()
-            if not record:
-                safe_print(f"   ⚠️ [{filename}] Nenhum retorno do APOC")
-                return None
 
-            total = record.get("total", 0) or 0
-            committed = record.get("committedOperations", 0) or 0
-            failed = record.get("failedOperations", 0) or 0
-            time_ms = record.get("timeTaken", 0) or 0
+            total = record["total"] or 0
+            committed = record["committedOperations"] or 0
+            failed = record["failedOperations"] or 0
+            time_ms = record["timeTaken"] or 0
 
-            ops = record.get("operations") or {}
-            created = ops.get("created", 0)
+            # --------------------------------------------------
+            # Contagem DEPOIS
+            # --------------------------------------------------
+            after = session.run(
+                f"MATCH (n:{label}) RETURN count(n) AS c"
+            ).single()["c"]
+
+            created = max(after - before, 0)
             updated = total - created
 
             safe_print(f"   ✅ [{filename}] Carga concluída")
@@ -153,12 +165,14 @@ def process_file(driver, filename, idx, total_files):
             safe_print(f"   ❌ Falhas: {failed:,}")
             safe_print(f"   🆕 Criados: {created:,}")
             safe_print(f"   🔄 Atualizados: {updated:,}")
-            if time_ms > 0:
-                safe_print(f"   ⏱️ Tempo: {time_ms/1000:.2f}s")
-            else:
-                safe_print(f"   ⏱️ Tempo: <1ms")
+            safe_print(f"   ⏱️ Tempo: {time_ms/1000:.2f}s")
 
-            return {"success": True, "created": created, "updated": updated, "total": total}
+            return {
+                "success": True,
+                "created": created,
+                "updated": updated,
+                "total": total
+            }
 
     except Exception:
         import traceback
@@ -171,9 +185,9 @@ def process_file(driver, filename, idx, total_files):
 # ==========================================================
 def load_raw_files():
 
-    safe_print("="*70)
+    safe_print("=" * 70)
     safe_print("🚀 INICIANDO CARGA BRONZE (RAW) NO NEO4J")
-    safe_print("="*70)
+    safe_print("=" * 70)
 
     driver = GraphDatabase.driver(
         NEO4J_URI,
@@ -187,29 +201,30 @@ def load_raw_files():
 
     files = sorted(f for f in os.listdir(SOURCE_DIR) if f.endswith(".txt"))
     safe_print(f"📁 Arquivos encontrados: {len(files)}")
-    if not files:
-        driver.close()
-        return
 
     total_created = total_updated = success = failed = 0
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {executor.submit(process_file, driver, f, i, len(files)): f for i,f in enumerate(files,1)}
+        futures = {
+            executor.submit(process_file, driver, f, i, len(files)): f
+            for i, f in enumerate(files, 1)
+        }
+
         for future in as_completed(futures):
             result = future.result()
             if result and result.get("success"):
                 success += 1
-                total_created += result.get("created",0)
-                total_updated += result.get("updated",0)
+                total_created += result["created"]
+                total_updated += result["updated"]
             else:
                 failed += 1
 
     driver.close()
 
-    safe_print("="*70)
+    safe_print("=" * 70)
     safe_print("✅ CARGA BRONZE FINALIZADA")
     safe_print(f"✔️ Arquivos com sucesso: {success}")
     safe_print(f"❌ Arquivos com falha: {failed}")
     safe_print(f"🆕 Nós criados: {total_created:,}")
     safe_print(f"🔄 Nós atualizados: {total_updated:,}")
-    safe_print("="*70)
+    safe_print("=" * 70)
