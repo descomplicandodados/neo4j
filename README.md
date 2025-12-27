@@ -94,3 +94,7 @@ like this
 
 or like this
 ![alt text](image-4.png)
+
+## Conclusion
+
+- This project could be improved on the future with observability, monitoring, analytical and BI integration
