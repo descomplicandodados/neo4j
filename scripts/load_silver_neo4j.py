@@ -1,9 +1,8 @@
 import os
 from neo4j import GraphDatabase
-import pandas as pd  # CSV / Parquet export
 
 # ==========================================================
-# Airflow callable
+# Airflow 
 # ==========================================================
 def load_silver():
 
@@ -269,32 +268,6 @@ def load_silver():
         """).single()
 
         print(f"   🏢 Sponsors → Phase relations created: {result['total']}")
-
-        # ==================================================
-        # EXPORT ANALYSIS VIEW
-        # ==================================================
-        print("\n📊 Exporting analysis view (CSV / Parquet)")
-
-        export_query = """
-        MATCH (d:staged_interventions)-[:STUDIED_IN]->(t:staged_trials)-[:STUDIES_CONDITION]->(c:staged_conditions)
-        RETURN
-            d.name AS drug,
-            c.name AS condition,
-            count(DISTINCT t.nct_id) AS trial_count,
-            collect(DISTINCT t.raw_phase) AS phases
-        LIMIT 1000
-        """
-
-        result = session.run(export_query)
-        data = [record.data() for record in result]
-
-        if data:
-            df = pd.DataFrame(data)
-            df.to_csv("analysis_view.csv", index=False)
-            df.to_parquet("analysis_view.parquet", index=False)
-            print("✅ Exported analysis_view.csv and analysis_view.parquet")
-        else:
-            print("⚠️ No data returned for export")
 
         print("\n" + "=" * 80)
         print("✅ SILVER TRANSFORMATION COMPLETED SUCCESSFULLY")

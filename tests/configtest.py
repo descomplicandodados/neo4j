@@ -55,7 +55,6 @@ def mock_env_vars(monkeypatch):
         "NEO4J_PASSWORD": "password",
         "SOURCE_DIR": "/tmp/test_source",
         "NEO4J_IMPORT_DIR": "/tmp/test_import",
-        "MAX_LINES_PER_FILE": "10000",
         "BATCH_SIZE": "5000",
         "MAX_WORKERS": "3",
     }

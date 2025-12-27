@@ -287,12 +287,10 @@ class TestEnvironmentValidation:
 
     def test_default_values_for_optional_vars(self):
         """Testa valores padrão para variáveis opcionais"""
-        max_lines = int(os.getenv("MAX_LINES_PER_FILE", "10000"))
         batch_size = int(os.getenv("BATCH_SIZE", "5000"))
         max_workers = int(os.getenv("MAX_WORKERS", "3"))
         
         # Se não definidas, devem usar defaults
-        assert max_lines >= 1000
         assert batch_size >= 1000
         assert max_workers >= 1
 

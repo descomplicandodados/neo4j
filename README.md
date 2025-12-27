@@ -1,11 +1,5 @@
-## comando para converter entrypoint para unix
-dos2unix entrypoint.sh
 
-## comando para executar os testes
- tests/run_tests.sh all
- tests/run_tests.sh integration
-
-## 📊 Data Engineer Code Challenge
+## 📊 Data Engineer/Neo4j Code Challenge
 ClinicalTrials.gov → Neo4j Knowledge Graph
 
 This project implements a complete end-to-end data pipeline that ingests public data from ClinicalTrials.gov, transforms it into structured entities, and loads everything into a Neo4j graph database.
@@ -54,20 +48,23 @@ git clone https://github.com/descomplicandodados/neo4j.git
 ```
 cd neo4j
 ```
+- Execute the commands
+```
+mkdir bases_neo4j
+```
+```
+mkdir import_raw
+```
 
 - Download data from [Clinical-Trials](https://ctti-aact.nyc3.digitaloceanspaces.com/6scsc1rzihfyr5gdh3fxglrs8sro)
 - Extract data from zip/rar, copy all txt files and past on neo4j/bases_neo4j folder
 
 - Execute the commands:
 ```
-docker build -t neo4j .
+docker compose up -d --build 
 ```
 
-```
-docker run --rm neo4j
-```
-
-- Wait 1 minute or a little bit more to neo4j and airflow starts to working
+- Wait until neo4j and airflow starts to working
 
 ## Run this commands to execute the tests
 ```

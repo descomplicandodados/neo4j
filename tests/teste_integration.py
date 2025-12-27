@@ -6,9 +6,9 @@ from neo4j import GraphDatabase
 import time
 
 # Configurações de teste (usar variáveis de ambiente ou defaults)
-TEST_NEO4J_URI = os.getenv("TEST_NEO4J_URI", "bolt://neo4j:7687")
-TEST_NEO4J_USER = os.getenv("TEST_NEO4J_USER", "neo4j")
-TEST_NEO4J_PASSWORD = os.getenv("TEST_NEO4J_PASSWORD", "password")
+TEST_NEO4J_URI = os.getenv("NEO4J_URI", "bolt://neo4j:7687")
+TEST_NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+TEST_NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "teste123")
 
 # Diretório de import compartilhado com Neo4j (ajustar conforme seu docker-compose)
 NEO4J_IMPORT_DIR = os.getenv("NEO4J_IMPORT_DIR", "/opt/airflow/import_raw")

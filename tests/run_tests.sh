@@ -85,9 +85,9 @@ run_integration_tests() {
     print_header "Executando Testes de Integração"
     
     # Configurar variáveis de ambiente
-    export TEST_NEO4J_URI=${TEST_NEO4J_URI:-bolt://neo4j:7687}
-    export TEST_NEO4J_USER=${TEST_NEO4J_USER:-neo4j}
-    export TEST_NEO4J_PASSWORD=${TEST_NEO4J_PASSWORD:-password}
+    export TEST_NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+    export TEST_NEO4J_USER=${NEO4J_USER:-neo4j}
+    export TEST_NEO4J_PASSWORD=${NEO4J_PASSWORD:-teste123}
     
     if [ -z "$TEST_NEO4J_PASSWORD" ] || [ "$TEST_NEO4J_PASSWORD" = "password" ]; then
         print_warning "Usando senha padrão. Configure TEST_NEO4J_PASSWORD se necessário"
@@ -100,9 +100,9 @@ run_integration_tests() {
     else
         # Rodando fora do container - usar usuário airflow
         docker exec -u airflow \
-                    -e TEST_NEO4J_URI="$TEST_NEO4J_URI" \
-                    -e TEST_NEO4J_USER="$TEST_NEO4J_USER" \
-                    -e TEST_NEO4J_PASSWORD="$TEST_NEO4J_PASSWORD" \
+                    -e TEST_NEO4J_URI="$NEO4J_URI" \
+                    -e TEST_NEO4J_USER="$NEO4J_USER" \
+                    -e TEST_NEO4J_PASSWORD="$NEO4J_PASSWORD" \
                     airflow bash -c "
             cd /opt/airflow/tests && \
             pytest teste_integration.py -v --tb=short -s
@@ -116,9 +116,9 @@ run_integration_tests() {
 run_all_tests() {
     print_header "Executando TODOS os Testes"
     
-    export TEST_NEO4J_URI=${TEST_NEO4J_URI:-bolt://neo4j:7687}
-    export TEST_NEO4J_USER=${TEST_NEO4J_USER:-neo4j}
-    export TEST_NEO4J_PASSWORD=${TEST_NEO4J_PASSWORD:-password}
+    export TEST_NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+    export TEST_NEO4J_USER=${NEO4J_USER:-neo4j}
+    export TEST_NEO4J_PASSWORD=${NEO4J_PASSWORD:-teste123}
     
     if is_inside_docker; then
         # Rodando dentro do container
@@ -127,9 +127,9 @@ run_all_tests() {
     else
         # Rodando fora do container - usar usuário airflow
         docker exec -u airflow \
-                    -e TEST_NEO4J_URI="$TEST_NEO4J_URI" \
-                    -e TEST_NEO4J_USER="$TEST_NEO4J_USER" \
-                    -e TEST_NEO4J_PASSWORD="$TEST_NEO4J_PASSWORD" \
+                    -e TEST_NEO4J_URI="$NEO4J_URI" \
+                    -e TEST_NEO4J_USER="$NEO4J_USER" \
+                    -e TEST_NEO4J_PASSWORD="$NEO4J_PASSWORD" \
                     airflow bash -c "
             cd /opt/airflow/tests && \
             pytest -v --tb=short
@@ -143,9 +143,9 @@ run_all_tests() {
 run_coverage() {
     print_header "Executando Testes com Cobertura"
     
-    export TEST_NEO4J_URI=${TEST_NEO4J_URI:-bolt://neo4j:7687}
-    export TEST_NEO4J_USER=${TEST_NEO4J_USER:-neo4j}
-    export TEST_NEO4J_PASSWORD=${TEST_NEO4J_PASSWORD:-password}
+    export TEST_NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+    export TEST_NEO4J_USER=${NEO4J_USER:-neo4j}
+    export TEST_NEO4J_PASSWORD=${NEO4J_PASSWORD:-teste123}
     
     if is_inside_docker; then
         # Rodando dentro do container
@@ -195,18 +195,18 @@ run_fast_tests() {
 run_main_integration() {
     print_header "Executando Teste Principal de Integração"
     
-    export TEST_NEO4J_URI=${TEST_NEO4J_URI:-bolt://neo4j:7687}
-    export TEST_NEO4J_USER=${TEST_NEO4J_USER:-neo4j}
-    export TEST_NEO4J_PASSWORD=${TEST_NEO4J_PASSWORD:-password}
+    export TEST_NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+    export TEST_NEO4J_USER=${NEO4J_USER:-neo4j}
+    export TEST_NEO4J_PASSWORD=${NEO4J_PASSWORD:-teste123}
     
     if is_inside_docker; then
         cd /opt/airflow/tests
         pytest teste_integration.py::TestIntegrationSmallDataset::test_load_small_dataset_into_neo4j -v -s
     else
         docker exec -u airflow \
-                    -e TEST_NEO4J_URI="$TEST_NEO4J_URI" \
-                    -e TEST_NEO4J_USER="$TEST_NEO4J_USER" \
-                    -e TEST_NEO4J_PASSWORD="$TEST_NEO4J_PASSWORD" \
+                    -e TEST_NEO4J_URI="$NEO4J_URI" \
+                    -e TEST_NEO4J_USER="$NEO4J_USER" \
+                    -e TEST_NEO4J_PASSWORD="$NEO4J_PASSWORD" \
                     airflow bash -c "
             cd /opt/airflow/tests && \
             pytest teste_integration.py::TestIntegrationSmallDataset::test_load_small_dataset_into_neo4j -v -s
