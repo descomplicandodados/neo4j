@@ -27,11 +27,4 @@ with DAG(
         python_callable=load_silver
     )
 
-    trigger_gold = TriggerDagRunOperator(
-        task_id='trigger_gold_dag',
-        trigger_dag_id='gold_layer_dag',
-        wait_for_completion=False,
-        reset_dag_run=True
-    )
 
-    silver_task >> trigger_gold
