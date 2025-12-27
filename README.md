@@ -82,7 +82,7 @@ You will wait until de Runs column status be "sucess". This process will have be
 
 ## Neo4j
 Use this address[Neo4j](http://localhost:7474/) to access neo4j, use user:neo4j and password:teste123, both can be changed on .env file.
-One on neo4j, you can run queries like this
+Once neo4j works, you can run queries like this
 ![alt text](image-1.png)
 
 like this
